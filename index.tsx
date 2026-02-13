@@ -1,130 +1,177 @@
-import React, { useEffect, useRef } from "react";
-import { createRoot } from "react-dom/client";
+import React, { useEffect, useRef } from 'react';
+import { createRoot } from 'react-dom/client';
 
-/* ================= CONFIG ================= */
-
-const TEXT = "Akito祝您新春快乐";
+// --- Constants & Config ---
 const CHARACTERS = "0123456789ABCDEF<>{};()[]=+*-/_$@#%&";
 const FONT_SIZE = 14;
 const GRAVITY = 0.05;
 const FRICTION = 0.96;
-const COLORS = ["#ff0055", "#00ff99", "#00ccff", "#ffcc00", "#9900ff", "#ff5500"];
+const COLOR_PALETTE = [
+  '#ff0055', // Neon Pink
+  '#00ff99', // Cyber Green
+  '#00ccff', // Electric Blue
+  '#ffcc00', // Gold
+  '#9900ff', // Purple
+  '#ff5500', // Orange
+];
 
-const rand = (a: number, b: number) => Math.random() * (b - a) + a;
-const randChar = () => CHARACTERS[Math.floor(Math.random() * CHARACTERS.length)];
-const randColor = () => COLORS[Math.floor(Math.random() * COLORS.length)];
+// --- Helper Functions ---
+const randomChar = () => CHARACTERS[Math.floor(Math.random() * CHARACTERS.length)];
+const randomRange = (min: number, max: number) => Math.random() * (max - min) + min;
+const randomColor = () => COLOR_PALETTE[Math.floor(Math.random() * COLOR_PALETTE.length)];
 
-/* ================= MATRIX RAIN ================= */
+// --- Classes ---
 
 class MatrixDrop {
   x: number;
   y: number;
   speed: number;
-  char: string;
-  h: number;
-  last: number;
-  interval: number;
+  text: string;
+  canvasHeight: number;
+  lastUpdate: number;
+  updateInterval: number;
 
-  constructor(x: number, h: number) {
+  constructor(x: number, canvasHeight: number) {
     this.x = x;
-    this.h = h;
-    this.y = rand(-h, 0);
-    this.speed = rand(2, 5);
-    this.char = randChar();
-    this.last = 0;
-    this.interval = rand(50, 150);
+    this.y = randomRange(-canvasHeight * 1.5, 0); 
+    this.canvasHeight = canvasHeight;
+    this.speed = randomRange(2, 5);
+    this.text = randomChar();
+    this.lastUpdate = 0;
+    this.updateInterval = randomRange(50, 150);
   }
 
-  update(t: number) {
+  update(time: number) {
     this.y += this.speed;
-    if (t - this.last > this.interval) {
-      this.char = randChar();
-      this.last = t;
+    
+    if (time - this.lastUpdate > this.updateInterval) {
+      this.text = randomChar();
+      this.lastUpdate = time;
     }
-    if (this.y > this.h) this.y = rand(-100, 0);
+
+    if (this.y > this.canvasHeight) {
+      this.y = randomRange(-100, 0);
+      this.speed = randomRange(2, 5);
+    }
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    ctx.fillStyle = "#00ff00";
+    ctx.fillStyle = '#0F0'; // Matrix Green
     ctx.font = `${FONT_SIZE}px monospace`;
-    ctx.globalAlpha = 0.3;
-    ctx.fillText(this.char, this.x, this.y);
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = 0.3; // Faint background
+    ctx.fillText(this.text, this.x, this.y);
+    ctx.globalAlpha = 1.0;
   }
 }
-
-/* ================= TEXT PARTICLE ================= */
 
 class TextParticle {
   x: number;
   y: number;
-  bx: number;
-  by: number;
+  baseX: number;
+  baseY: number;
+  size: number;
   density: number;
+  color: string;
   char: string;
-
+  
   constructor(x: number, y: number) {
-    this.x = this.bx = x;
-    this.y = this.by = y;
-    this.density = rand(5, 25);
-    this.char = randChar();
-  }
-
-  update(mx: number | null, my: number | null, shock: { x: number; y: number; r: number }[]) {
-    if (mx !== null && my !== null) {
-      const dx = this.x - mx;
-      const dy = this.y - my;
-      const d = Math.sqrt(dx * dx + dy * dy);
-      if (d < 120) {
-        const f = (120 - d) / 120;
-        this.x += (dx / d) * f * this.density;
-        this.y += (dy / d) * f * this.density;
-      }
-    }
-
-    shock.forEach(s => {
-      const dx = this.x - s.x;
-      const dy = this.y - s.y;
-      const d = Math.sqrt(dx * dx + dy * dy);
-      if (d < s.r) {
-        const f = (s.r - d) / s.r;
-        this.x += (dx / d) * f * 20;
-        this.y += (dy / d) * f * 20;
-      }
-    });
-
-    this.x += (this.bx - this.x) * 0.1;
-    this.y += (this.by - this.y) * 0.1;
+    this.x = x;
+    this.y = y;
+    this.baseX = x;
+    this.baseY = y;
+    this.size = 10; // Font size for particle
+    this.density = (Math.random() * 30) + 1;
+    this.color = '#00FF00'; // Green
+    this.char = randomChar();
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    ctx.fillStyle = "#00ff00";
-    ctx.font = "10px monospace";
+    // Glitch effect: Occasional white flicker
+    if (Math.random() > 0.95) {
+        ctx.fillStyle = '#FFF';
+    } else {
+        ctx.fillStyle = this.color;
+    }
+    
+    ctx.font = `${this.size}px monospace`;
     ctx.fillText(this.char, this.x, this.y);
   }
-}
 
-/* ================= EXPLOSION PARTICLE ================= */
+  update(mouseX: number | null, mouseY: number | null, explosions: {x: number, y: number, radius: number}[]) {
+    let dx = 0;
+    let dy = 0;
+    let forceDirectionX = 0;
+    let forceDirectionY = 0;
+    let force = 0;
+
+    // Interaction with Mouse
+    if (mouseX !== null && mouseY !== null) {
+        dx = mouseX - this.x;
+        dy = mouseY - this.y;
+        let distance = Math.sqrt(dx * dx + dy * dy);
+        let maxDistance = 100;
+        
+        if (distance < maxDistance) {
+            forceDirectionX = dx / distance;
+            forceDirectionY = dy / distance;
+            force = (maxDistance - distance) / maxDistance;
+            let directionX = forceDirectionX * force * this.density;
+            let directionY = forceDirectionY * force * this.density;
+            this.x -= directionX;
+            this.y -= directionY;
+        }
+    }
+
+    // Interaction with Explosions (Shockwaves)
+    explosions.forEach(exp => {
+        const ex_dx = exp.x - this.x;
+        const ex_dy = exp.y - this.y;
+        const ex_dist = Math.sqrt(ex_dx*ex_dx + ex_dy*ex_dy);
+        const shockRadius = exp.radius * 2; // Shockwave travels further than visual particles
+
+        if (ex_dist < shockRadius) {
+            const force = (shockRadius - ex_dist) / shockRadius;
+            const angle = Math.atan2(ex_dy, ex_dx);
+            this.x -= Math.cos(angle) * force * 15; // Strong push
+            this.y -= Math.sin(angle) * force * 15;
+        }
+    });
+
+    // Spring back to base
+    if (this.x !== this.baseX) {
+        let dx = this.x - this.baseX;
+        this.x -= dx / 10;
+    }
+    if (this.y !== this.baseY) {
+        let dy = this.y - this.baseY;
+        this.y -= dy / 10;
+    }
+  }
+}
 
 class Particle {
   x: number;
   y: number;
   vx: number;
   vy: number;
-  a: number;
+  alpha: number;
   color: string;
   char: string;
+  life: number;
+  decay: number;
 
-  constructor(x: number, y: number, c: string) {
-    const ang = rand(0, Math.PI * 2);
-    const sp = rand(3, 10);
+  constructor(x: number, y: number, color: string) {
     this.x = x;
     this.y = y;
-    this.vx = Math.cos(ang) * sp;
-    this.vy = Math.sin(ang) * sp;
-    this.a = 1;
-    this.color = c;
-    this.char = randChar();
+    const angle = randomRange(0, Math.PI * 2);
+    const speed = randomRange(3, 10);
+    this.vx = Math.cos(angle) * speed;
+    this.vy = Math.sin(angle) * speed;
+    this.alpha = 1;
+    this.color = color;
+    this.char = randomChar();
+    this.life = 100;
+    this.decay = randomRange(0.005, 0.015);
   }
 
   update() {
@@ -133,181 +180,275 @@ class Particle {
     this.vy += GRAVITY;
     this.vx *= FRICTION;
     this.vy *= FRICTION;
-    this.a -= 0.015;
+    this.alpha -= this.decay;
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    ctx.globalCompositeOperation = "lighter";
-    ctx.globalAlpha = Math.max(0, this.a);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = Math.max(0, this.alpha);
     ctx.fillStyle = this.color;
-    ctx.font = "bold 14px monospace";
+    ctx.font = `bold ${FONT_SIZE}px monospace`;
     ctx.fillText(this.char, this.x, this.y);
-    ctx.globalAlpha = 1;
-    ctx.globalCompositeOperation = "source-over";
+    ctx.restore();
   }
 }
-
-/* ================= ROCKET ================= */
 
 class Rocket {
   x: number;
   y: number;
-  tx: number;
-  ty: number;
+  targetX: number;
+  targetY: number;
+  speed: number;
   color: string;
-  speed = 6;
-  trail: { x: number; y: number }[] = [];
-  done = false;
+  trail: {x: number, y: number}[];
+  exploded: boolean;
 
-  constructor(sx: number, sy: number, tx: number, ty: number) {
-    this.x = sx;
-    this.y = sy;
-    this.tx = tx;
-    this.ty = ty;
-    this.color = randColor();
+  constructor(startX: number, startY: number, targetX: number, targetY: number) {
+    this.x = startX;
+    this.y = startY;
+    this.targetX = targetX;
+    this.targetY = targetY;
+    this.speed = 6;
+    this.color = randomColor();
+    this.trail = [];
+    this.exploded = false;
   }
 
   update() {
-    const dx = this.tx - this.x;
-    const dy = this.ty - this.y;
-    const d = Math.sqrt(dx * dx + dy * dy);
-    if (d < this.speed) {
-      this.x = this.tx;
-      this.y = this.ty;
-      this.done = true;
-      return;
+    const dx = this.targetX - this.x;
+    const dy = this.targetY - this.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance < this.speed) {
+      this.x = this.targetX;
+      this.y = this.targetY;
+      this.exploded = true;
+    } else {
+      const angle = Math.atan2(dy, dx);
+      this.x += Math.cos(angle) * this.speed;
+      this.y += Math.sin(angle) * this.speed;
     }
-    const a = Math.atan2(dy, dx);
-    this.x += Math.cos(a) * this.speed;
-    this.y += Math.sin(a) * this.speed;
+
     this.trail.push({ x: this.x, y: this.y });
     if (this.trail.length > 8) this.trail.shift();
   }
 
   draw(ctx: CanvasRenderingContext2D) {
+    ctx.save();
     ctx.strokeStyle = this.color;
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    this.trail.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+    if (this.trail.length > 0) {
+      ctx.moveTo(this.trail[0].x, this.trail[0].y);
+      for (const p of this.trail) {
+        ctx.lineTo(p.x, p.y);
+      }
+    } else {
+      ctx.moveTo(this.x, this.y);
+      ctx.lineTo(this.x, this.y + 2);
+    }
     ctx.stroke();
+    ctx.fillStyle = '#FFF';
+    ctx.fillRect(this.x - 1, this.y - 1, 3, 3);
+    ctx.restore();
   }
 }
 
-/* ================= MAIN ================= */
+// --- Main Component ---
 
-const App = () => {
-  const ref = useRef<HTMLCanvasElement>(null);
+const CodeFireworks = () => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    const canvas = ref.current!;
-    const ctx = canvas.getContext("2d")!;
-    let w = window.innerWidth;
-    let h = window.innerHeight;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // State
+    let width = window.innerWidth;
+    let height = window.innerHeight;
     let rockets: Rocket[] = [];
     let particles: Particle[] = [];
     let drops: MatrixDrop[] = [];
-    let text: TextParticle[] = [];
-    let shock: { x: number; y: number; r: number; life: number }[] = [];
+    let textParticles: TextParticle[] = [];
+    let animationId: number;
+    let lastAutoLaunch = 0;
+    
     let mouse = { x: null as number | null, y: null as number | null };
+    let explosions: {x: number, y: number, radius: number, life: number}[] = [];
 
-    const resize = () => {
-      w = window.innerWidth;
-      h = window.innerHeight;
-      canvas.width = w;
-      canvas.height = h;
+    // Initialize Text Particles
+    const initTextParticles = (w: number, h: number) => {
+        textParticles = [];
+        const offscreen = document.createElement('canvas');
+        offscreen.width = w;
+        offscreen.height = h;
+        const oCtx = offscreen.getContext('2d');
+        if (!oCtx) return;
+
+        const fontSize = Math.max(10, w / 10); // Responsive font
+        oCtx.font = `900 ${fontSize}px "Microsoft YaHei", sans-serif`;
+        oCtx.fillStyle = 'white';
+        oCtx.textAlign = 'center';
+        oCtx.textBaseline = 'middle';
+        oCtx.fillText("Akito祝您新春快乐", w / 2, h / 2);
+
+        const imageData = oCtx.getImageData(0, 0, w, h);
+        const data = imageData.data;
+        
+        const step = 6; // Sample every 6th pixel (increased for text chars)
+
+        for (let y = 0; y < h; y += step) {
+            for (let x = 0; x < w; x += step) {
+                // Check alpha channel
+                const index = (y * w + x) * 4;
+                if (data[index + 3] > 128) {
+                    textParticles.push(new TextParticle(x, y));
+                }
+            }
+        }
+    };
+
+    // Initialization
+    const init = () => {
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = width;
+      canvas.height = height;
+
+      // Matrix Drops
+      drops = [];
+      const columns = Math.floor(width / FONT_SIZE);
+      for (let i = 0; i < columns; i++) {
+        for (let j = 0; j < 6; j++) {
+           drops.push(new MatrixDrop(i * FONT_SIZE, height));
+        }
+      }
+
+      // Text Particles
+      initTextParticles(width, height);
+    };
+
+    // Interaction
+    const launchFirework = (targetX: number, targetY: number) => {
+      const startX = width / 2 + randomRange(-width / 4, width / 4);
+      rockets.push(new Rocket(startX, height, targetX, targetY));
+    };
+
+    const explode = (x: number, y: number, color: string) => {
+      const particleCount = 200;
+      for (let i = 0; i < particleCount; i++) {
+        particles.push(new Particle(x, y, color));
+      }
+      // Register shockwave
+      explosions.push({x, y, radius: 10, life: 20});
+    };
+
+    const handleResize = () => {
       init();
     };
 
-    const initText = () => {
-      const off = document.createElement("canvas");
-      off.width = w;
-      off.height = h;
-      const o = off.getContext("2d")!;
-      const isMobile = w < 768;
-      const font = isMobile ? Math.min(w * 0.12, 48) : Math.min(w * 0.18, 140);
-
-      o.font = `900 ${font}px Microsoft YaHei`;
-      o.fillStyle = "#fff";
-      o.textAlign = "center";
-      o.textBaseline = "middle";
-
-      const maxW = isMobile ? w * 0.9 : w;
-      const chars = TEXT.split("");
-      let line = "";
-      let lines: string[] = [];
-
-      chars.forEach(c => {
-        if (o.measureText(line + c).width > maxW) {
-          lines.push(line);
-          line = c;
-        } else line += c;
-      });
-      lines.push(line);
-
-      const lh = font * 1.2;
-      lines.forEach((l, i) => o.fillText(l, w / 2, h / 2 + (i - lines.length / 2) * lh));
-
-      const img = o.getImageData(0, 0, w, h).data;
-      text = [];
-      const step = isMobile ? 8 : 6;
-      for (let y = 0; y < h; y += step)
-        for (let x = 0; x < w; x += step)
-          if (img[(y * w + x) * 4 + 3] > 100) text.push(new TextParticle(x, y));
+    const handleClick = (e: MouseEvent) => {
+      launchFirework(e.clientX, e.clientY);
+    };
+    
+    const handleTouch = (e: TouchEvent) => {
+       e.preventDefault();
+       const touch = e.touches[0];
+       launchFirework(touch.clientX, touch.clientY);
+       mouse.x = touch.clientX;
+       mouse.y = touch.clientY;
     };
 
-    const init = () => {
-      drops = [];
-      for (let i = 0; i < w / FONT_SIZE; i++)
-        for (let j = 0; j < 6; j++) drops.push(new MatrixDrop(i * FONT_SIZE, h));
-      initText();
+    const handleMouseMove = (e: MouseEvent) => {
+        mouse.x = e.clientX;
+        mouse.y = e.clientY;
     };
 
-    const explode = (x: number, y: number, c: string) => {
-      for (let i = 0; i < 200; i++) particles.push(new Particle(x, y, c));
-      shock.push({ x, y, r: 20, life: 20 });
-    };
+    // Animation Loop
+    const animate = (time: number) => {
+      // Clear with trail effect
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.2)'; 
+      ctx.fillRect(0, 0, width, height);
 
-    const animate = () => {
-      ctx.fillStyle = "rgba(0,0,0,0.25)";
-      ctx.fillRect(0, 0, w, h);
-
-      drops.forEach(d => {
-        d.update(Date.now());
-        d.draw(ctx);
+      // 1. Draw Background Drops (Code Rain)
+      drops.forEach(drop => {
+        drop.update(time);
+        drop.draw(ctx);
       });
 
-      shock.forEach(s => (s.r += 10, s.life--));
-      shock = shock.filter(s => s.life > 0);
+      // 2. Process Explosions/Shockwaves for Interaction
+      for(let i = explosions.length - 1; i >= 0; i--) {
+          explosions[i].radius += 5; // Shockwave expands
+          explosions[i].life--;
+          if(explosions[i].life <= 0) explosions.splice(i, 1);
+      }
 
-      text.forEach(t => {
-        t.update(mouse.x, mouse.y, shock);
-        t.draw(ctx);
-      });
+      // 3. Draw Interactive Text Particles
+      for (let i = 0; i < textParticles.length; i++) {
+          textParticles[i].update(mouse.x, mouse.y, explosions);
+          textParticles[i].draw(ctx);
+      }
 
-      rockets.forEach((r, i) => {
-        r.update();
-        r.draw(ctx);
-        if (r.done) {
-          explode(r.x, r.y, r.color);
+      // 4. Auto Launch Logic
+      if (time - lastAutoLaunch > 1500 && Math.random() < 0.05) {
+        const targetX = randomRange(width * 0.1, width * 0.9);
+        const targetY = randomRange(height * 0.1, height * 0.5);
+        launchFirework(targetX, targetY);
+        lastAutoLaunch = time;
+      }
+
+      // 5. Update & Draw Rockets
+      for (let i = rockets.length - 1; i >= 0; i--) {
+        const rocket = rockets[i];
+        rocket.update();
+        rocket.draw(ctx);
+
+        if (rocket.exploded) {
+          explode(rocket.x, rocket.y, rocket.color);
           rockets.splice(i, 1);
         }
-      });
+      }
 
-      particles.forEach(p => (p.update(), p.draw(ctx)));
-      particles = particles.filter(p => p.a > 0);
+      // 6. Update & Draw Explosion Particles
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.update();
+        p.draw(ctx);
 
-      requestAnimationFrame(animate);
+        if (p.alpha <= 0) {
+          particles.splice(i, 1);
+        }
+      }
+
+      animationId = requestAnimationFrame(animate);
     };
 
-    window.addEventListener("resize", resize);
-    window.addEventListener("mousedown", e => rockets.push(new Rocket(w / 2, h, e.clientX, e.clientY)));
-    window.addEventListener("mousemove", e => ((mouse.x = e.clientX), (mouse.y = e.clientY)));
-    window.addEventListener("touchstart", e => rockets.push(new Rocket(w / 2, h, e.touches[0].clientX, e.touches[0].clientY)));
+    // Event Listeners
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('mousedown', handleClick);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('touchstart', handleTouch, { passive: false });
+    window.addEventListener('touchmove', handleTouch, { passive: false });
 
-    resize();
-    animate();
+    // Start
+    init();
+    animate(0);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('mousedown', handleClick);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('touchstart', handleTouch);
+      window.removeEventListener('touchmove', handleTouch);
+      cancelAnimationFrame(animationId);
+    };
   }, []);
 
-  return <canvas ref={ref} style={{ width: "100vw", height: "100vh" }} />;
+  return <canvas ref={canvasRef} />;
 };
 
-createRoot(document.getElementById("root")!).render(<App />);
+const root = createRoot(document.getElementById('root')!);
+root.render(<CodeFireworks />);
