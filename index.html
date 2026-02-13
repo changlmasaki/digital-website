@@ -12,6 +12,7 @@
         height: 100%;
         background-color: #000;
         overflow: hidden; /* Prevent scrollbars */
+        touch-action: none; /* Prevent scroll/zoom on mobile */
       }
       #root {
         width: 100%;
@@ -30,7 +31,6 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
 </head>
   <body>
     <div id="root"></div>

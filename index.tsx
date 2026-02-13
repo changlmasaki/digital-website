@@ -283,12 +283,14 @@ const CodeFireworks = () => {
     const initTextParticles = (w: number, h: number) => {
         textParticles = [];
         const offscreen = document.createElement('canvas');
+        // Offscreen canvas uses logical size for position mapping
         offscreen.width = w;
         offscreen.height = h;
         const oCtx = offscreen.getContext('2d');
         if (!oCtx) return;
 
-        const fontSize = Math.max(10, w / 10); // Responsive font
+        // Adjusted font size divider for mobile safely (w/11 fits better on narrow screens)
+        const fontSize = Math.max(15, w / 11); 
         oCtx.font = `900 ${fontSize}px "Microsoft YaHei", sans-serif`;
         oCtx.fillStyle = 'white';
         oCtx.textAlign = 'center';
@@ -313,10 +315,21 @@ const CodeFireworks = () => {
 
     // Initialization
     const init = () => {
+      // High DPI support
+      const dpr = window.devicePixelRatio || 1;
       width = window.innerWidth;
       height = window.innerHeight;
-      canvas.width = width;
-      canvas.height = height;
+      
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      
+      // Enforce CSS size to match logical size
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      
+      // Scale context to match logical coordinate system
+      ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform
+      ctx.scale(dpr, dpr);
 
       // Matrix Drops
       drops = [];
@@ -357,6 +370,7 @@ const CodeFireworks = () => {
     const handleTouch = (e: TouchEvent) => {
        e.preventDefault();
        const touch = e.touches[0];
+       // Touch coordinates are already logical pixels, so they work with ctx.scale
        launchFirework(touch.clientX, touch.clientY);
        mouse.x = touch.clientX;
        mouse.y = touch.clientY;
